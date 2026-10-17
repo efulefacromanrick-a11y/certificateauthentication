@@ -46,12 +46,42 @@ function createOtp() { return String(crypto.randomInt(0, 1_000_000)).padStart(6,
 function maskDestination(value: string) { return value.includes('@') ? `${value.slice(0, 2)}***${value.slice(value.indexOf('@'))}` : `${value.slice(0, 3)}***${value.slice(-2)}`; }
 
 async function sendOtp(channel: 'email' | 'sms', destination: string, code: string) {
-  if (process.env.REGISTRATION_OTP_DEBUG === 'true' && process.env.NODE_ENV !== 'production') {
+  const verificationRequired = process.env.REGISTRATION_OTP_REQUIRED !== 'false';
+  if (!verificationRequired && process.env.NODE_ENV !== 'production') return {};
+
+  if (channel === 'email' && process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) {
+    const fromName = process.env.SENDGRID_FROM_NAME || 'CertVerify';
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: destination }] }],
+        from: { email: process.env.SENDGRID_FROM_EMAIL, name: fromName },
+        subject: 'Your CertVerify verification code',
+        content: [
+          { type: 'text/plain', value: `Your CertVerify verification code is ${code}. It expires in 10 minutes.` },
+          { type: 'text/html', value: `<p>Your CertVerify verification code is:</p><p style="font-size:24px;font-weight:700;letter-spacing:4px">${code}</p><p>This code expires in 10 minutes.</p>` },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[registration] SendGrid rejected OTP email with status ${response.status}`);
+      throw new Error('Unable to send the verification email. Please try again later.');
+    }
+    return {};
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
     console.info(`[registration] development OTP for ${channel} ${maskDestination(destination)}: ${code}`);
     return { debugCode: code };
   }
-  // Configure an email/SMS provider here. Failing closed prevents unverified accounts.
-  throw new Error('OTP delivery is not configured. Set REGISTRATION_OTP_DEBUG=true for local development only.');
+  throw new Error(channel === 'email'
+    ? 'Email verification is not configured. Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
+    : 'Phone verification is not configured.');
 }
 
 export async function getRegistrationOptions() {
