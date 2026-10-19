@@ -47,7 +47,7 @@ No account should become active, and no session should be issued, until identity
 | **School** | Yes | Select from the four listed government schools on the registration form |
 | **G.C.E. examination session/year** | Yes | Controlled selection, not free text; only open/allowed sessions can register |
 | **Examination centre/school** | Yes | Select from an approved centre list where possible; store immutable centre ID and display snapshot |
-| **Email address or phone number** | Yes, at least one | Normalize email to lowercase or phone to E.164; verify the selected channel with OTP |
+| **Email address or phone number** | Yes, at least one | Normalize email to lowercase or phone to E.164; verify the selected channel with OTP. A verified email is saved to the user account and can be used with the password to sign in. |
 | **Username** (if required) | Conditional | Unique, 3–30 characters, lowercase comparison, letters/numbers/period/underscore/hyphen only; do not require it when email login is sufficient |
 | **Strong password** | Yes | 12+ characters recommended, max 128; reject common/breached passwords; do not require arbitrary symbol rules that harm usability |
 | **Confirm password** | Yes | Must match password in the same request; never store it |

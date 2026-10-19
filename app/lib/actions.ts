@@ -9,7 +9,7 @@ import { clearSession, getCurrentUserId, setSession, isAdmin } from './auth';
 import { revokeCertificate } from './certificates';
 
 export async function login(formData: FormData) {
-  const email = z.string().email().safeParse(formData.get('email'));
+  const email = z.string().trim().email().safeParse(formData.get('email'));
   const password = z.string().min(6).safeParse(formData.get('password'));
   if (!email.success || !password.success) redirect('/login?error=Invalid%20email%20or%20password');
 

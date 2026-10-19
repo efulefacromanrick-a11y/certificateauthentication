@@ -22,7 +22,7 @@ export default function LoginForm({ error, next = '/dashboard' }: { error?: stri
               className="mb-3 mt-5 block text-xs font-medium text-gray-900"
               htmlFor="email"
             >
-              Email
+              Email address used during registration
             </label>
             <div className="relative">
               <input
@@ -30,7 +30,10 @@ export default function LoginForm({ error, next = '/dashboard' }: { error?: stri
                 id="email"
                 type="email"
                 name="email"
-                placeholder="Enter your email address"
+                placeholder="name@example.com"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
               />
               <AtSymbolIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
@@ -49,7 +52,8 @@ export default function LoginForm({ error, next = '/dashboard' }: { error?: stri
                 id="password"
                 type="password"
                 name="password"
-                placeholder="Enter password"
+                placeholder="Enter your password"
+                autoComplete="current-password"
                 required
                 minLength={6}
               />
