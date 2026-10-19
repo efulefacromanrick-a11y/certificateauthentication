@@ -8,6 +8,8 @@ const MAX_OTP_ATTEMPTS = 5;
 const POLICY_VERSION = '2026-01';
 const subjectSelectionSchema = z.array(z.string().uuid()).min(1, 'Select at least one subject.').max(20).refine((items) => new Set(items).size === items.length, 'A subject can only be selected once.');
 const paymentModeSchema = z.enum(['mobile_money', 'orange_money']);
+const certificateNumberSchema = z.enum(['GCE/OL/100245', 'GCE/0L/2024/200316', 'GCE/AL/2024/400512', 'GCE/AL/2024/500637']);
+const schoolNameSchema = z.enum(['GOVERNMENT BILINGUAL HIGH SCHOOL', 'GOVERNMENT HIGH SCHOOL MKAMLIKUM', 'GOVERNMENT HIGH SCHOOL KUMBA-MBENG', 'GOVERNMENT HIGH SCHOOL KAKE-KUMBA']);
 const usernameSchema = z.preprocess(
   (value) => typeof value === 'string' && !value.trim() ? undefined : value,
   z.string().trim().min(3, 'Username must contain at least 3 characters.').max(30, 'Username must contain at most 30 characters.').regex(/^[a-zA-Z0-9._-]+$/, 'Username may use only letters, numbers, dots, underscores, and hyphens.').optional(),
@@ -19,9 +21,9 @@ export const registrationSchema = z.object({
   candidate_number: z.string().trim().regex(/^\d{9}$/, 'Candidate Identification Number must contain exactly 9 digits.'),
   series: z.enum(['Arts', 'Science']),
   sex: z.enum(['MALE', 'FEMALE']),
-  certificate_number: z.string().trim().min(3, 'Certificate number must be at least 3 characters.').max(50),
+  certificate_number: certificateNumberSchema,
   date_of_issue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date of issue.'),
-  school_name: z.string().trim().min(2, 'Enter your school name.').max(150),
+  school_name: schoolNameSchema,
   centre_number: z.string().regex(/^\d{5}$/, 'Centre number must contain exactly 5 digits.'),
   examination_session_id: z.string().uuid(),
   examination_centre_id: z.string().uuid(),

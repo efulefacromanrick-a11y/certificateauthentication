@@ -43,6 +43,8 @@ No account should become active, and no session should be issued, until identity
 | **Candidate/Registration number** | Yes | Exact exam-system format from configuration; uppercase/trim for lookup; unique per examination session |
 | **Series** | Yes | Select **ARTS** or **SCIENCE**; store the selected examination series |
 | **Sex** | Yes | Select **MALE** or **FEMALE**; store on the candidate profile |
+| **Certificate number** | Yes | Select from the approved certificate numbers listed on the registration form |
+| **School** | Yes | Select from the four listed government schools on the registration form |
 | **G.C.E. examination session/year** | Yes | Controlled selection, not free text; only open/allowed sessions can register |
 | **Examination centre/school** | Yes | Select from an approved centre list where possible; store immutable centre ID and display snapshot |
 | **Email address or phone number** | Yes, at least one | Normalize email to lowercase or phone to E.164; verify the selected channel with OTP |
