@@ -10,9 +10,10 @@ const subjectSelectionSchema = z.array(z.string().uuid()).min(1, 'Select at leas
 const paymentModeSchema = z.enum(['mobile_money', 'orange_money']);
 const certificateNumberSchema = z.enum(['GCE/OL/100245', 'GCE/0L/2024/200316', 'GCE/AL/2024/400512', 'GCE/AL/2024/500637']);
 const schoolNameSchema = z.enum(['GOVERNMENT BILINGUAL HIGH SCHOOL', 'GOVERNMENT HIGH SCHOOL MKAMLIKUM', 'GOVERNMENT HIGH SCHOOL KUMBA-MBENG', 'GOVERNMENT HIGH SCHOOL KAKE-KUMBA']);
+const usernameOptions = ['ADMIN123', 'JOHN2024', 'SCHOOLADMIN', 'VERIFYCERT', 'GCEMANAGER'] as const;
 const usernameSchema = z.preprocess(
   (value) => typeof value === 'string' && !value.trim() ? undefined : value,
-  z.string().trim().min(3, 'Username must contain at least 3 characters.').max(30, 'Username must contain at most 30 characters.').regex(/^[a-zA-Z0-9._-]+$/, 'Username may use only letters, numbers, dots, underscores, and hyphens.').optional(),
+  z.enum(usernameOptions).optional(),
 );
 
 export const registrationSchema = z.object({
