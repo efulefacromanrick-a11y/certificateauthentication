@@ -108,10 +108,26 @@ CREATE TABLE IF NOT EXISTS candidate_profiles (
   candidate_number_normalized TEXT NOT NULL,
   examination_session_id UUID NOT NULL REFERENCES examination_sessions(id),
   examination_centre_id UUID NOT NULL REFERENCES examination_centres(id),
+  series TEXT NOT NULL CHECK (series IN ('Arts', 'Science')),
+  sex TEXT NOT NULL CHECK (sex IN ('MALE', 'FEMALE')),
+  certificate_number TEXT NOT NULL CHECK (char_length(btrim(certificate_number)) >= 3),
+  date_of_issue DATE NOT NULL,
+  school_name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (candidate_number_normalized, examination_session_id)
 );
+ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS series TEXT;
+ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS sex TEXT;
+ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS certificate_number TEXT;
+ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS date_of_issue DATE;
+ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS school_name TEXT;
+ALTER TABLE candidate_profiles DROP CONSTRAINT IF EXISTS candidate_profiles_series_check;
+ALTER TABLE candidate_profiles ADD CONSTRAINT candidate_profiles_series_check CHECK (series IS NULL OR series IN ('Arts', 'Science'));
+ALTER TABLE candidate_profiles DROP CONSTRAINT IF EXISTS candidate_profiles_sex_check;
+ALTER TABLE candidate_profiles ADD CONSTRAINT candidate_profiles_sex_check CHECK (sex IS NULL OR sex IN ('MALE', 'FEMALE'));
+ALTER TABLE candidate_profiles DROP CONSTRAINT IF EXISTS candidate_profiles_certificate_number_check;
+ALTER TABLE candidate_profiles ADD CONSTRAINT candidate_profiles_certificate_number_check CHECK (certificate_number IS NULL OR char_length(btrim(certificate_number)) >= 3);
 CREATE TABLE IF NOT EXISTS examination_subjects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   code TEXT NOT NULL UNIQUE,
@@ -163,6 +179,7 @@ ALTER TABLE candidate_registration_payments ADD COLUMN IF NOT EXISTS payment_ref
 ALTER TABLE candidate_registration_payments DROP CONSTRAINT IF EXISTS candidate_registration_payments_payment_mode_check;
 ALTER TABLE candidate_registration_payments ADD CONSTRAINT candidate_registration_payments_payment_mode_check CHECK (payment_mode IS NULL OR payment_mode IN ('mobile_money', 'orange_money'));
 ALTER TABLE candidate_registration_payments ADD COLUMN IF NOT EXISTS franking_fee NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE candidate_registration_payments DROP CONSTRAINT IF EXISTS candidate_registration_payments_check;
 ALTER TABLE candidate_registration_payments DROP CONSTRAINT IF EXISTS candidate_registration_payments_total_amount_check;
 ALTER TABLE candidate_registration_payments ADD CONSTRAINT candidate_registration_payments_total_amount_check CHECK (total_amount = registration_fee + franking_fee + subjects_total);
 CREATE INDEX IF NOT EXISTS candidate_subjects_user_idx ON candidate_subject_registrations (user_id, examination_session_id);
@@ -211,8 +228,12 @@ CREATE TABLE IF NOT EXISTS identity_events (
   result TEXT NOT NULL,
   reason TEXT,
   request_id TEXT NOT NULL,
+  ip_hash TEXT,
+  user_agent_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE identity_events ADD COLUMN IF NOT EXISTS ip_hash TEXT;
+ALTER TABLE identity_events ADD COLUMN IF NOT EXISTS user_agent_hash TEXT;
 CREATE INDEX IF NOT EXISTS identity_events_created_idx ON identity_events (created_at DESC);
 
 INSERT INTO examination_sessions (name, year, status)

@@ -17,6 +17,11 @@ export const registrationSchema = z.object({
   full_name: z.string().trim().min(2).max(150),
   date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   candidate_number: z.string().trim().regex(/^\d{9}$/, 'Candidate Identification Number must contain exactly 9 digits.'),
+  series: z.enum(['Arts', 'Science']),
+  sex: z.enum(['MALE', 'FEMALE']),
+  certificate_number: z.string().trim().min(3, 'Certificate number must be at least 3 characters.').max(50),
+  date_of_issue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date of issue.'),
+  school_name: z.string().trim().min(2, 'Enter your school name.').max(150),
   centre_number: z.string().regex(/^\d{5}$/, 'Centre number must contain exactly 5 digits.'),
   examination_session_id: z.string().uuid(),
   examination_centre_id: z.string().uuid(),
@@ -32,6 +37,8 @@ export const registrationSchema = z.object({
 }).superRefine((value, ctx) => {
   const birthDate = new Date(`${value.date_of_birth}T00:00:00Z`);
   if (Number.isNaN(birthDate.getTime()) || birthDate > new Date()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['date_of_birth'], message: 'Enter a valid date of birth.' });
+  const issueDate = new Date(`${value.date_of_issue}T00:00:00Z`);
+  if (Number.isNaN(issueDate.getTime()) || issueDate.toISOString().slice(0, 10) !== value.date_of_issue || issueDate > new Date()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['date_of_issue'], message: 'Enter a valid date of issue that is not in the future.' });
   if (!value.email && !value.phone) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Enter an email address or phone number.' });
   if (value.candidate_number.slice(0, 5) !== value.centre_number) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['candidate_number'], message: 'CIN must start with the 5-digit centre number.' });
   if (value.password !== value.confirm_password) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['confirm_password'], message: 'Passwords do not match.' });
@@ -104,7 +111,7 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   if (birthDate > new Date()) throw new Error('Date of birth cannot be in the future.');
 
   const [sessionRows, centre, subjects, duplicates] = await Promise.all([
-    sql`SELECT id, registration_fee FROM examination_sessions WHERE id = ${parsed.examination_session_id} AND status = 'open' AND (registration_opens_at IS NULL OR registration_opens_at <= now()) AND (registration_closes_at IS NULL OR registration_closes_at > now()) LIMIT 1`,
+    sql`SELECT id, registration_fee, franking_fee FROM examination_sessions WHERE id = ${parsed.examination_session_id} AND status = 'open' AND (registration_opens_at IS NULL OR registration_opens_at <= now()) AND (registration_closes_at IS NULL OR registration_closes_at > now()) LIMIT 1`,
     sql`SELECT c.id, cn.id AS centre_number_id FROM examination_centres c JOIN centre_numbers cn ON cn.centre_id = c.id WHERE c.id = ${parsed.examination_centre_id} AND cn.centre_number = ${centreNumber} AND c.status = 'active' LIMIT 1`,
     sql`SELECT id, code, name, amount, paper_fee, practical_fee, practical_required FROM examination_subjects WHERE id = ANY(${parsed.subjects}::uuid[]) AND status = 'active'`,
     sql`SELECT u.id FROM users u LEFT JOIN candidate_profiles p ON p.user_id = u.id WHERE (CAST(${email} AS text) IS NOT NULL AND lower(u.email) = ${email}) OR (CAST(${phone} AS text) IS NOT NULL AND u.phone_e164 = ${phone}) OR (CAST(${username} AS text) IS NOT NULL AND lower(u.username) = ${username}) OR EXISTS (SELECT 1 FROM candidate_profiles cp WHERE cp.candidate_number_normalized = ${candidateNumber} AND cp.examination_session_id = ${parsed.examination_session_id}) LIMIT 1`,
@@ -124,9 +131,32 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   const otp = createOtp();
   const channel = email ? 'email' : 'sms';
   const destination = email || phone!;
+  const registrationPayload = {
+    full_name: parsed.full_name.trim(),
+    full_name_normalized: normalizeName(parsed.full_name),
+    date_of_birth: parsed.date_of_birth,
+    candidate_number: parsed.candidate_number.trim(),
+    candidate_number_normalized: candidateNumber,
+    series: parsed.series,
+    sex: parsed.sex,
+    certificate_number: parsed.certificate_number.trim(),
+    date_of_issue: parsed.date_of_issue,
+    school_name: parsed.school_name.trim(),
+    centre_number: centreNumber,
+    centre_number_id: centreNumberId,
+    examination_session_id: parsed.examination_session_id,
+    examination_centre_id: parsed.examination_centre_id,
+    subjects: subjectItems,
+    registration_fee: registrationFee,
+    franking_fee: frankingFee,
+    subjects_total: subjectsTotal,
+    total_amount: registrationFee + frankingFee + subjectsTotal,
+    payment_mode: parsed.payment_mode,
+    policy_version: POLICY_VERSION,
+  };
   const [registration] = await sql`
     INSERT INTO pending_registrations (registration_key, email, phone_e164, username, password_hash, registration_payload, expires_at)
-    VALUES (${registrationKey}, ${email}, ${phone}, ${username}, ${passwordHash}, ${JSON.stringify({ full_name: parsed.full_name.trim(), full_name_normalized: normalizeName(parsed.full_name), date_of_birth: parsed.date_of_birth, candidate_number: parsed.candidate_number.trim(), candidate_number_normalized: candidateNumber, centre_number: centreNumber, centre_number_id: centreNumberId, examination_session_id: parsed.examination_session_id, examination_centre_id: parsed.examination_centre_id, subjects: subjectItems, registration_fee: registrationFee, franking_fee: frankingFee, subjects_total: subjectsTotal, total_amount: registrationFee + frankingFee + subjectsTotal, payment_mode: parsed.payment_mode, policy_version: POLICY_VERSION })}, ${new Date(Date.now() + OTP_TTL_MS)})
+    VALUES (${registrationKey}, ${email}, ${phone}, ${username}, ${passwordHash}, ${sql.json(registrationPayload)}, ${new Date(Date.now() + OTP_TTL_MS)})
     RETURNING id`;
   await sql`INSERT INTO otp_challenges (registration_id, purpose, channel, destination_hash, code_hash, expires_at) VALUES (${registration.id}, 'registration', ${channel}, ${hash(destination)}, ${hash(otp)}, ${new Date(Date.now() + OTP_TTL_MS)})`;
   const delivery = await sendOtp(channel, destination, otp);
@@ -144,13 +174,20 @@ export async function verifyRegistration(registrationKey: string, code: string, 
     await sql`UPDATE otp_challenges SET attempts = attempts + 1 WHERE id = ${pending.otp_id} AND attempts < ${MAX_OTP_ATTEMPTS}`;
     throw new Error('That code is incorrect. Check the message and try again.');
   }
-  const payload = pending.registration_payload as { full_name: string; full_name_normalized: string; date_of_birth: string; candidate_number: string; candidate_number_normalized: string; centre_number_id: string; examination_session_id: string; examination_centre_id: string; subjects: { id: string; amount: number }[]; registration_fee: number; franking_fee: number; subjects_total: number; total_amount: number; payment_mode: 'mobile_money' | 'orange_money'; policy_version: string };
+  let payload: { full_name: string; full_name_normalized: string; date_of_birth: string; candidate_number: string; candidate_number_normalized: string; series: 'Arts' | 'Science'; sex: 'MALE' | 'FEMALE'; certificate_number: string; date_of_issue: string; school_name: string; centre_number_id: string; examination_session_id: string; examination_centre_id: string; subjects: { id: string; amount: number }[]; registration_fee: number; franking_fee: number; subjects_total: number; total_amount: number; payment_mode: 'mobile_money' | 'orange_money'; policy_version: string };
+  try {
+    const storedPayload = pending.registration_payload;
+    payload = (typeof storedPayload === 'string' ? JSON.parse(storedPayload) : storedPayload) as typeof payload;
+    if (!payload || typeof payload !== 'object' || !payload.full_name || !payload.school_name || !['MALE', 'FEMALE'].includes(payload.sex) || !Array.isArray(payload.subjects)) throw new Error('Incomplete registration payload.');
+  } catch {
+    throw new Error('Registration details could not be read. Please go back and submit the form again.');
+  }
   const email = pending.email as string | null;
   const phone = pending.phone_e164 as string | null;
   const [user] = await sql.begin(async (tx) => {
     await tx`UPDATE otp_challenges SET consumed_at = now() WHERE id = ${pending.otp_id} AND consumed_at IS NULL`;
     const users = await tx`INSERT INTO users (name, email, phone_e164, username, password, role, status, created_at) VALUES (${payload.full_name}, ${email}, ${phone}, ${pending.username}, ${pending.password_hash}, 'citizen', 'active', now()) RETURNING id`;
-    await tx`INSERT INTO candidate_profiles (user_id, full_name, full_name_normalized, date_of_birth, candidate_number, candidate_number_normalized, examination_session_id, examination_centre_id) VALUES (${users[0].id}, ${payload.full_name}, ${payload.full_name_normalized}, ${payload.date_of_birth}, ${payload.candidate_number}, ${payload.candidate_number_normalized}, ${payload.examination_session_id}, ${payload.examination_centre_id})`;
+    await tx`INSERT INTO candidate_profiles (user_id, full_name, full_name_normalized, date_of_birth, candidate_number, candidate_number_normalized, examination_session_id, examination_centre_id, series, sex, certificate_number, date_of_issue, school_name) VALUES (${users[0].id}, ${payload.full_name}, ${payload.full_name_normalized}, ${payload.date_of_birth}, ${payload.candidate_number}, ${payload.candidate_number_normalized}, ${payload.examination_session_id}, ${payload.examination_centre_id}, ${payload.series}, ${payload.sex}, ${payload.certificate_number}, ${payload.date_of_issue}, ${payload.school_name})`;
     await tx`INSERT INTO candidate_numbers (candidate_number, centre_number_id, user_id, examination_session_id) VALUES (${payload.candidate_number}, ${payload.centre_number_id}, ${users[0].id}, ${payload.examination_session_id})`;
     for (const subject of payload.subjects) await tx`INSERT INTO candidate_subject_registrations (user_id, subject_id, examination_session_id, amount_paid) VALUES (${users[0].id}, ${subject.id}, ${payload.examination_session_id}, ${subject.amount})`;
     await tx`INSERT INTO candidate_registration_payments (user_id, examination_session_id, registration_fee, franking_fee, subjects_total, total_amount, payment_mode, payment_status) VALUES (${users[0].id}, ${payload.examination_session_id}, ${payload.registration_fee}, ${payload.franking_fee}, ${payload.subjects_total}, ${payload.total_amount}, ${payload.payment_mode}, 'pending')`;

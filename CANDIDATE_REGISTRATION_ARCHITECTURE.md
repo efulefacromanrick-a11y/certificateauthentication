@@ -41,6 +41,8 @@ No account should become active, and no session should be issued, until identity
 | **Full name** — exactly as registered for the examination | Yes | Trimmed, Unicode-aware, 2–150 characters; preserve display form and store a normalized comparison form |
 | **Date of birth** | Yes | Valid calendar date; not future; enforce configured minimum/maximum age policy without assuming all candidates are adults |
 | **Candidate/Registration number** | Yes | Exact exam-system format from configuration; uppercase/trim for lookup; unique per examination session |
+| **Series** | Yes | Select **ARTS** or **SCIENCE**; store the selected examination series |
+| **Sex** | Yes | Select **MALE** or **FEMALE**; store on the candidate profile |
 | **G.C.E. examination session/year** | Yes | Controlled selection, not free text; only open/allowed sessions can register |
 | **Examination centre/school** | Yes | Select from an approved centre list where possible; store immutable centre ID and display snapshot |
 | **Email address or phone number** | Yes, at least one | Normalize email to lowercase or phone to E.164; verify the selected channel with OTP |
@@ -114,6 +116,8 @@ candidate_profiles
   date_of_birth DATE NOT NULL
   candidate_number TEXT NOT NULL
   candidate_number_normalized TEXT NOT NULL
+  series TEXT NOT NULL CHECK (series IN ('Arts', 'Science'))
+  sex TEXT NOT NULL CHECK (sex IN ('MALE', 'FEMALE'))
   examination_session_id UUID NOT NULL references examination_sessions
   examination_centre_id UUID NOT NULL references examination_centres
   created_at, updated_at

@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     }
     return new Response(JSON.stringify({ ...result, verification_required: true }), { status: 201, headers: securityHeaders(traceId) });
   } catch (error) {
+    console.error(`[registration-start] ${traceId}`, error);
     const message = error instanceof Error ? error.message : 'Unable to start registration.';
     const status = message.startsWith('A registration') || message.includes('not open') || message.includes('not available') ? 409 : 422;
     return new Response(JSON.stringify({ error: message }), { status, headers: securityHeaders(traceId) });
