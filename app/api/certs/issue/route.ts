@@ -9,6 +9,9 @@ const bodySchema = z.object({
   certificate_title: z.string().trim().min(3),
   recipient_name: z.string().trim().min(3),
   recipient_email: z.string().trim().email().optional(),
+  candidate_number: z.string().trim().min(1).max(100),
+  examination_type: z.enum(['O/L', 'A/L']),
+  examination_year: z.coerce.number().int().min(2000).max(2200),
   achievement: z.string().trim().min(2).max(2000),
   issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   university_name: z.string().trim().min(2),
@@ -42,13 +45,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const { certificate_title, recipient_name, recipient_email, achievement, issue_date, university_name, authorized_signature, official_stamp, signature_image, stamp_image, expires_at } = parseResult.data;
+  const { certificate_title, recipient_name, recipient_email, candidate_number, examination_type, examination_year, achievement, issue_date, university_name, authorized_signature, official_stamp, signature_image, stamp_image, expires_at } = parseResult.data;
 
   try {
     const response = await issueCertificate({
       certificate_title,
       recipient_name,
       recipient_email,
+      candidate_number,
+      examination_type,
+      examination_year,
       achievement,
       issue_date,
       university_name,
