@@ -92,6 +92,10 @@ function decodeJws(jws: string) {
   }
 }
 
+export function getCertificatePayloadFromSignature(jws: string) {
+  return decodeJws(jws);
+}
+
 function createSerial() {
   return crypto.randomBytes(8).toString('base64').replace(/\+/g, '0').replace(/\//g, '0').slice(0, 12);
 }
