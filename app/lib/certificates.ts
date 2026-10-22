@@ -277,8 +277,61 @@ export async function verifyCertificateByIdentifier(identifier: string, context:
   `;
 
   if (!rows[0]?.signature) {
-    await recordVerification(null, 'invalid', 'certificate_not_found', context);
-    return { status: 'invalid' as const, reason: 'certificate_not_found' };
+    const normalizedCandidateNumber = identifier.normalize('NFKC').trim().replace(/\s+/g, '').toUpperCase();
+    const candidateRows = await sql`
+      SELECT
+        cp.user_id,
+        cp.full_name,
+        cp.candidate_number,
+        cp.certificate_number,
+        cp.date_of_issue,
+        es.name AS examination_name,
+        es.year AS examination_year
+      FROM candidate_profiles cp
+      JOIN examination_sessions es ON es.id = cp.examination_session_id
+      WHERE cp.candidate_number_normalized = ${normalizedCandidateNumber}
+        OR lower(btrim(cp.certificate_number)) = lower(${identifier.trim()})
+      LIMIT 2
+    `;
+
+    if (candidateRows.length > 1) {
+      await recordVerification(null, 'invalid', 'certificate_identifier_ambiguous', context);
+      return { status: 'invalid' as const, reason: 'certificate_identifier_ambiguous' };
+    }
+
+    const candidate = candidateRows[0];
+    if (!candidate) {
+      await recordVerification(null, 'invalid', 'certificate_not_found', context);
+      return { status: 'invalid' as const, reason: 'certificate_not_found' };
+    }
+
+    const examinationName = String(candidate.examination_name);
+    const normalizedExaminationName = examinationName.toLowerCase();
+    const examinationType = normalizedExaminationName.includes('ordinary') || /\bo\s*\/\s*l\b/i.test(examinationName)
+      ? 'O/L'
+      : normalizedExaminationName.includes('advanced') || /\ba\s*\/\s*l\b/i.test(examinationName)
+        ? 'A/L'
+        : undefined;
+    const issueDate = new Date(`${String(candidate.date_of_issue).slice(0, 10)}T00:00:00Z`);
+    if (Number.isNaN(issueDate.getTime())) {
+      throw new Error('Candidate registry contains an invalid certificate issue date.');
+    }
+
+    const certificate = {
+      id: String(candidate.user_id),
+      serial: String(candidate.certificate_number),
+      certificate_title: examinationName,
+      recipient_name: String(candidate.full_name),
+      candidate_number: String(candidate.candidate_number),
+      examination_type: examinationType,
+      examination_year: Number(candidate.examination_year),
+      university_name: 'G.C.E. candidate registry',
+      issued_at: Math.floor(issueDate.getTime() / 1000),
+      expires_at: null,
+    };
+
+    await recordVerification(null, 'valid', undefined, context);
+    return { status: 'valid' as const, certificate };
   }
 
   return verifyCertificate(rows[0].signature as string, context);

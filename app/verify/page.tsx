@@ -154,6 +154,15 @@ export default function VerifyPage() {
   const detail = result ? statusDetails[result.status] : null;
   const StatusIcon = detail?.icon;
   const certificate = result?.certificate;
+  const invalidDescription = result?.reason === 'certificate_not_found'
+    ? 'No record matches that ID, candidate number, or certificate number. Check the number and try again.'
+    : result?.reason === 'certificate_identifier_ambiguous'
+      ? 'More than one candidate record matches that number. Please contact the issuing authority to confirm the correct certificate number.'
+      : result?.reason === 'signature_mismatch'
+        ? 'The QR code or certificate token could not be authenticated. Request a new verification code from the issuing authority.'
+        : result?.reason === 'payload_mismatch'
+          ? 'The certificate details do not match the official record. Contact the issuing authority.'
+          : detail?.description;
 
   return (
     <main className="min-h-screen bg-[#07111f] px-5 py-8 text-slate-100 sm:px-8 sm:py-14">
@@ -176,9 +185,9 @@ export default function VerifyPage() {
           </section>
           <section className="rounded-[28px] border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/20 sm:p-8">
             <form onSubmit={handleSubmit}>
-              <label htmlFor="certificate-id" className="text-sm font-semibold text-slate-200">Candidate certificate number or ID</label>
+              <label htmlFor="certificate-id" className="text-sm font-semibold text-slate-200">Certificate ID, candidate number, or certificate number</label>
               <div className="mt-3 flex gap-3">
-                <input id="certificate-id" value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Enter certificate ID or number" className="min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 text-white outline-none placeholder:text-slate-600 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20" />
+                <input id="certificate-id" value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Enter certificate ID or candidate number" className="min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 text-white outline-none placeholder:text-slate-600 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20" />
                 <button type="submit" disabled={loading || !identifier.trim()} className="rounded-2xl bg-sky-500 px-5 py-3 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50">
                   {loading ? 'Checking…' : 'Verify'}
                 </button>
@@ -210,7 +219,7 @@ export default function VerifyPage() {
                     <StatusIcon className="h-8 w-8 shrink-0" />
                     <div>
                       <p className="text-xl font-semibold">Certificate status: {detail.label}</p>
-                      <p className="mt-1 text-sm opacity-80">{detail.description}</p>
+                      <p className="mt-1 text-sm opacity-80">{result.status === 'invalid' ? invalidDescription : detail.description}</p>
                     </div>
                   </div>
                   <div className="mt-5 border-t border-current/10 pt-4 text-sm">

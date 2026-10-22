@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const result = parseResult.data.jws
       ? await verifyCertificate(parseResult.data.jws, { requestId: id, ip: clientAddress(request), userAgent: request.headers.get('user-agent') ?? undefined })
       : await verifyCertificateByIdentifier(parseResult.data.id!, { requestId: id, ip: clientAddress(request), userAgent: request.headers.get('user-agent') ?? undefined });
-    return new Response(JSON.stringify({ ...result, reason: result.status === 'invalid' ? undefined : result.reason, verified_at: new Date().toISOString() }), { status: 200, headers: securityHeaders(id) });
+    return new Response(JSON.stringify({ ...result, verified_at: new Date().toISOString() }), { status: 200, headers: securityHeaders(id) });
   } catch {
     return new Response(JSON.stringify({ error: 'Verification service is temporarily unavailable.' }), { status: 503, headers: securityHeaders(id) });
   }
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const result = parseResult.data.jws
       ? await verifyCertificate(parseResult.data.jws, { requestId: traceId, ip: clientAddress(request), userAgent: request.headers.get('user-agent') ?? undefined })
       : await verifyCertificateByIdentifier(parseResult.data.id!, { requestId: traceId, ip: clientAddress(request), userAgent: request.headers.get('user-agent') ?? undefined });
-    return new Response(JSON.stringify({ ...result, reason: result.status === 'invalid' ? undefined : result.reason, verified_at: new Date().toISOString() }), { status: 200, headers: securityHeaders(traceId) });
+    return new Response(JSON.stringify({ ...result, verified_at: new Date().toISOString() }), { status: 200, headers: securityHeaders(traceId) });
   } catch {
     return new Response(JSON.stringify({ error: 'Verification service is temporarily unavailable.' }), { status: 503, headers: securityHeaders(traceId) });
   }
