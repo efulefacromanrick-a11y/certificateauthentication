@@ -1,25 +1,15 @@
 import { z } from 'zod';
-import { issueCertificate, getAdminToken } from '@/app/lib/certificates';
+import { issueCandidateCertificate, getAdminToken } from '@/app/lib/certificates';
 import { NextRequest } from 'next/server';
 import { getCurrentUserId, isAdmin } from '@/app/lib/auth';
 
 export const runtime = 'nodejs';
 
 const bodySchema = z.object({
-  certificate_title: z.string().trim().min(3),
-  recipient_name: z.string().trim().min(3),
-  recipient_email: z.string().trim().email().optional(),
+  recipient_name: z.string().trim().min(2).max(150),
   candidate_number: z.string().trim().min(1).max(100),
   examination_type: z.enum(['O/L', 'A/L']),
   examination_year: z.coerce.number().int().min(2000).max(2200),
-  achievement: z.string().trim().min(2).max(2000),
-  issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  university_name: z.string().trim().min(2),
-  authorized_signature: z.string().trim().min(2),
-  official_stamp: z.string().trim().min(2),
-  signature_image: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(2_500_000).optional(),
-  stamp_image: z.string().regex(/^data:image\/(png|jpeg|jpg|webp);base64,/).max(2_500_000).optional(),
-  expires_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -45,25 +35,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const { certificate_title, recipient_name, recipient_email, candidate_number, examination_type, examination_year, achievement, issue_date, university_name, authorized_signature, official_stamp, signature_image, stamp_image, expires_at } = parseResult.data;
+  const { recipient_name, candidate_number, examination_type, examination_year } = parseResult.data;
 
   try {
-    const response = await issueCertificate({
-      certificate_title,
+    const response = await issueCandidateCertificate({
       recipient_name,
-      recipient_email,
       candidate_number,
       examination_type,
       examination_year,
-      achievement,
-      issue_date,
-      university_name,
-      authorized_signature,
-      official_stamp,
-      signature_image,
-      stamp_image,
-      expires_at,
     }, await getCurrentUserId());
+    if (!response) {
+      return new Response(JSON.stringify({ error: 'No unique registered candidate matches that name, examination number, type, and year. Check the details and try again.' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify(response), {
       status: 201,

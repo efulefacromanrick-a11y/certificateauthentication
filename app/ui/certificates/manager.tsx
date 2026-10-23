@@ -5,20 +5,10 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
 const initial = {
-  certificate_title: '',
   recipient_name: '',
-  recipient_email: '',
   candidate_number: '',
   examination_type: 'O/L' as 'O/L' | 'A/L',
   examination_year: String(new Date().getFullYear()),
-  achievement: '',
-  issue_date: new Date().toISOString().slice(0, 10),
-  university_name: '',
-  authorized_signature: '',
-  official_stamp: '',
-  signature_image: '',
-  stamp_image: '',
-  expires_at: '',
 };
 
 type IssuedCertificate = {
@@ -43,17 +33,6 @@ export default function CertificateManager() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const readImage = (key: 'signature_image' | 'stamp_image', file?: File) => {
-    if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 1_800_000) {
-      setMessage('Images must be PNG, JPEG, or WebP and smaller than 1.8 MB.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => update(key, String(reader.result));
-    reader.readAsDataURL(file);
-  };
-
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -64,13 +43,7 @@ export default function CertificateManager() {
       const response = await fetch('/api/certs/issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          recipient_email: form.recipient_email || undefined,
-          signature_image: form.signature_image || undefined,
-          stamp_image: form.stamp_image || undefined,
-          expires_at: form.expires_at || undefined,
-        }),
+        body: JSON.stringify({ ...form, examination_year: Number(form.examination_year) }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Unable to issue certificate.');
@@ -109,15 +82,8 @@ export default function CertificateManager() {
   }
 
   const fields: [keyof typeof initial, string, string][] = [
-    ['certificate_title', 'Certificate title', 'e.g. GCE Certificate'],
     ['recipient_name', "Candidate's full name", 'Candidate full name'],
-    ['candidate_number', 'Candidate number', 'Enter candidate number'],
-    ['recipient_email', "Recipient's email", 'candidate@example.com'],
-    ['achievement', 'Achievement', 'Examination or qualification details'],
-    ['issue_date', 'Date of issue', ''],
-    ['university_name', 'Issuing authority', 'Examination board or authority'],
-    ['authorized_signature', 'Authorized signature', 'Name and title of signatory'],
-    ['official_stamp', 'Official stamp', 'Official institution stamp or reference'],
+    ['candidate_number', 'Examination number', 'Enter examination number'],
   ];
 
   return (
@@ -128,8 +94,8 @@ export default function CertificateManager() {
           <label key={key} className="text-sm font-medium">
             {label}
             <input
-              required={key !== 'recipient_email'}
-              type={key === 'issue_date' ? 'date' : key === 'recipient_email' ? 'email' : 'text'}
+              required
+              type="text"
               value={form[key]}
               onChange={(event) => update(key, event.target.value)}
               placeholder={placeholder}
@@ -157,23 +123,11 @@ export default function CertificateManager() {
             required
             type="number"
             min="2000"
-            max="2200"
+            max={new Date().getFullYear() + 1}
             value={form.examination_year}
             onChange={(event) => update('examination_year', event.target.value)}
             className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3"
           />
-        </label>
-        <label className="text-sm font-medium">
-          Signature image
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => readImage('signature_image', event.target.files?.[0])} className="mt-2 w-full text-sm" />
-        </label>
-        <label className="text-sm font-medium">
-          Official stamp image
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => readImage('stamp_image', event.target.files?.[0])} className="mt-2 w-full text-sm" />
-        </label>
-        <label className="text-sm font-medium">
-          Expiry date (optional)
-          <input type="date" value={form.expires_at} onChange={(event) => update('expires_at', event.target.value)} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3" />
         </label>
         <button disabled={busy} className="rounded-xl bg-sky-500 px-5 py-3 font-semibold disabled:opacity-50 md:col-span-2">
           {busy ? 'Issuing...' : 'Issue certificate'}

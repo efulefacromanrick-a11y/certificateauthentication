@@ -222,6 +222,58 @@ export async function issueCertificate(
   return { certificate, jws };
 }
 
+export async function issueCandidateCertificate(
+  input: {
+    recipient_name: string;
+    candidate_number: string;
+    examination_type: 'O/L' | 'A/L';
+    examination_year: number;
+  },
+  createdBy?: string | null,
+) {
+  const fullNameNormalized = input.recipient_name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const candidateNumberNormalized = input.candidate_number.normalize('NFKC').trim().replace(/\s+/g, '').toLocaleUpperCase();
+  const examinationPattern = input.examination_type === 'O/L' ? '%ordinary%' : '%advanced%';
+  const rows = await sql`
+    SELECT
+      cp.full_name,
+      cp.candidate_number,
+      cp.date_of_issue::text AS date_of_issue,
+      u.email AS recipient_email,
+      es.name AS examination_name,
+      es.year AS examination_year
+    FROM candidate_profiles cp
+    JOIN users u ON u.id = cp.user_id
+    JOIN examination_sessions es ON es.id = cp.examination_session_id
+    WHERE cp.full_name_normalized = ${fullNameNormalized}
+      AND cp.candidate_number_normalized = ${candidateNumberNormalized}
+      AND es.year = ${input.examination_year}
+      AND es.name ILIKE ${examinationPattern}
+    LIMIT 2
+  `;
+
+  if (rows.length !== 1) return null;
+
+  const candidate = rows[0];
+  const issueDate = String(candidate.date_of_issue).slice(0, 10);
+  const examinationName = String(candidate.examination_name);
+  const certificateTitle = `GCE ${input.examination_year} ${input.examination_type === 'A/L' ? 'ADVANCED' : 'ORDINARY'} LEVEL`;
+
+  return issueCertificate({
+    certificate_title: certificateTitle,
+    recipient_name: String(candidate.full_name),
+    recipient_email: typeof candidate.recipient_email === 'string' ? candidate.recipient_email : undefined,
+    candidate_number: String(candidate.candidate_number),
+    examination_type: input.examination_type,
+    examination_year: Number(candidate.examination_year),
+    achievement: examinationName,
+    issue_date: issueDate,
+    university_name: 'CertVerify Examination Registry',
+    authorized_signature: 'Digitally signed by CertVerify',
+    official_stamp: 'Digitally authenticated examination record',
+  }, createdBy);
+}
+
 export async function verifyCertificate(
   jws: string,
   context: VerificationContext = {},
