@@ -1,4 +1,5 @@
-import { HomeIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { HomeIcon, DocumentDuplicateIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { isAdmin } from '@/app/lib/auth';
 
 // Map of links to display in the side navigation.
 // Depending on the size of the application, this would be stored in a database.
@@ -7,10 +8,15 @@ const links = [
   { name: 'Certificates', href: '/dashboard/certificates', icon: DocumentDuplicateIcon },
 ];
 
-export default function NavLinks() {
+export default async function NavLinks() {
+  const admin = await isAdmin();
+  const visibleLinks = admin
+    ? [...links, { name: 'Admin users', href: '/dashboard/admin', icon: UserGroupIcon }]
+    : links;
+
   return (
     <>
-      {links.map((link) => {
+      {visibleLinks.map((link) => {
         const LinkIcon = link.icon;
         return (
           <a

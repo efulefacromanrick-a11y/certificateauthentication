@@ -80,7 +80,16 @@ async function sendOtp(channel: 'email' | 'sms', destination: string, code: stri
 
     if (!response.ok) {
       console.error(`[registration] SendGrid rejected OTP email with status ${response.status}`);
-      throw new Error('Unable to send the verification email. Please try again later.');
+      if (response.status === 400) {
+        throw new Error('The verification email sender was rejected. Set SENDGRID_FROM_EMAIL to a verified SendGrid sender and try again.');
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('SendGrid rejected the email credentials. Check that SENDGRID_API_KEY is valid and has Mail Send permission.');
+      }
+      if (response.status === 429) {
+        throw new Error('The email service is temporarily rate limited. Please wait a few minutes and try again.');
+      }
+      throw new Error('The email service could not send your verification code. Please try again later or contact support.');
     }
     return {};
   }

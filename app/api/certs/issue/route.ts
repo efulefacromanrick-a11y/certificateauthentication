@@ -19,8 +19,11 @@ export async function POST(request: NextRequest) {
   const isAdminRequest = Boolean(adminToken) && authHeader === `Bearer ${adminToken}`;
   const isUserRequest = await isAdmin();
   if (!isAdminRequest && !isUserRequest) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
+    const authenticated = Boolean(await getCurrentUserId());
+    return new Response(JSON.stringify({
+      error: authenticated ? 'Administrator access required' : 'Authentication required',
+    }), {
+      status: authenticated ? 403 : 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }

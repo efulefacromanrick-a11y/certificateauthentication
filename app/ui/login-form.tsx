@@ -9,9 +9,11 @@ import { Button } from './button';
 import { login } from '@/app/lib/actions';
 
 export default function LoginForm({ error, next = '/dashboard' }: { error?: string; next?: string }) {
+  const safeNext = next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard';
+
   return (
     <form action={login} className="space-y-3">
-      <input type="hidden" name="next" value={next.startsWith('/') ? next : '/dashboard'} />
+      <input type="hidden" name="next" value={safeNext} />
       <div className="flex-1 rounded-lg bg-gray-50 px-6 pb-4 pt-8">
         <h1 className={`${lusitana.className} mb-3 text-2xl`}>
           Please log in to continue.

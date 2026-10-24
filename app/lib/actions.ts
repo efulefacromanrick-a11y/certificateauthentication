@@ -17,7 +17,7 @@ export async function login(formData: FormData) {
   const valid = users.length > 0 && await bcrypt.compare(password.data, users[0].password);
   if (!valid) redirect('/login?error=Invalid%20email%20or%20password');
   await setSession(users[0].id);
-  const next = z.string().startsWith('/').safeParse(formData.get('next'));
+  const next = z.string().refine((value) => value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')).safeParse(formData.get('next'));
   redirect(next.success ? next.data : '/dashboard');
 }
 

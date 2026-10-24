@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { revokeCertificate, getAdminToken } from '@/app/lib/certificates';
 import { NextRequest } from 'next/server';
-import { isAdmin } from '@/app/lib/auth';
+import { getCurrentUserId, isAdmin } from '@/app/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -16,8 +16,11 @@ export async function POST(request: NextRequest) {
 
   const isAdminRequest = Boolean(adminToken) && authHeader === `Bearer ${adminToken}`;
   if (!isAdminRequest && !(await isAdmin())) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
+    const authenticated = Boolean(await getCurrentUserId());
+    return new Response(JSON.stringify({
+      error: authenticated ? 'Administrator access required' : 'Authentication required',
+    }), {
+      status: authenticated ? 403 : 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }

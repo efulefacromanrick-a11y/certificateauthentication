@@ -9,9 +9,9 @@ Next.js and Neon/Postgres certificate service with account login, signed certifi
 3. Start the app with `pnpm.cmd dev` (port 4000), then run `pnpm.cmd db:seed` in another terminal to load the sample records.
 4. Open `http://localhost:4000/login` and sign in with the seeded demo account: `user@nextmail.com` / `123456`.
 
-The dashboard is certificate-only. New accounts can be created at `/signup`; signup accounts are citizens, while the seeded demo account is an admin. Certificate issuance and revocation require an admin session or the server-side `CERT_ADMIN_TOKEN`; the browser never needs to receive the admin token. Verification is public and checks both the Ed25519 signature and database status.
+The dashboard is certificate-only and requires an administrator account. New accounts created at `/signup` have the citizen role; the seeded demo account is an admin. Signing in as a citizen does not grant certificate-register or issuance access. Certificate issuance and revocation require an admin session or the server-side `CERT_ADMIN_TOKEN`; the browser never needs to receive the admin token. Verification is public and checks both the Ed25519 signature and database status.
 
-Use `/dashboard/certificates` for the authenticated certificate register and issue/revoke workflow. Use `/verify` for public token verification and `/issuer` for the standalone issuer form when a user is signed in.
+Use `/dashboard/certificates` for the administrator-only certificate register and issue/revoke workflow. Use `/verify` for public token verification and `/issuer` for the standalone issuer form when an administrator is signed in. If a legitimate staff account was created through signup, a database administrator must assign it the `admin` role before it can access certificate management.
 
 `GET /api/.well-known/issuer-keys` publishes the Ed25519 public key and `GET /api/certs/revocation-feed` publishes a signed, short-lived revocation snapshot. For production, replace every placeholder secret with a long random value, use HTTPS, configure the production `AUTH_URL`, and keep `CERT_ADMIN_TOKEN` and `SEED_TOKEN` server-side. Run the seed endpoint only during controlled setup.
 
