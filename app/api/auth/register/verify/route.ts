@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     if (typeof body?.registration_id !== 'string' || typeof body?.code !== 'string') throw new Error('Enter the verification code.');
     const result = await verifyRegistration(body.registration_id, body.code, traceId, address, request.headers.get('user-agent') ?? undefined);
     await setSession(result.userId);
-    return new Response(JSON.stringify({ success: true }), { status: 200, headers: securityHeaders(traceId) });
+    return new Response(JSON.stringify({ success: true, username_skipped: result.usernameSkipped }), { status: 200, headers: securityHeaders(traceId) });
   } catch (error) {
     const conflict = getRegistrationConflictMessage(error);
     return new Response(JSON.stringify({ error: conflict ?? (error instanceof Error ? error.message : 'Unable to verify registration.') }), { status: conflict ? 409 : 422, headers: securityHeaders(traceId) });

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     if (process.env.REGISTRATION_OTP_REQUIRED === 'false') {
       const verified = await verifyRegistration(result.registration_id, '', traceId, address, request.headers.get('user-agent') ?? undefined);
       await setSession(verified.userId);
-      return new Response(JSON.stringify({ success: true, verification_required: false }), { status: 201, headers: securityHeaders(traceId) });
+      return new Response(JSON.stringify({ success: true, verification_required: false, username_skipped: result.username_skipped || verified.usernameSkipped }), { status: 201, headers: securityHeaders(traceId) });
     }
     return new Response(JSON.stringify({ ...result, verification_required: true }), { status: 201, headers: securityHeaders(traceId) });
   } catch (error) {

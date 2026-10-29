@@ -124,7 +124,8 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   const parsed = registrationSchema.parse(input);
   const email = parsed.email ? parsed.email.toLowerCase() : null;
   const phone = parsed.phone ? normalizePhone(parsed.phone) : null;
-  const username = parsed.username ? parsed.username.toLowerCase() : null;
+  let username = parsed.username ? parsed.username.toLowerCase() : null;
+  let usernameSkipped = false;
   const candidateNumber = normalizeCandidate(parsed.candidate_number);
   const centreNumber = parsed.centre_number;
   const birthDate = new Date(`${parsed.date_of_birth}T00:00:00Z`);
@@ -159,7 +160,10 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   if (!centre.length) throw new Error('This examination centre is not available.');
   if (subjects.length !== parsed.subjects.length) throw new Error('One or more selected subjects are no longer available. Refresh and try again.');
   if (conflicts[0]?.contact_exists) throw new Error('An account already uses this email address or phone number. Sign in with that account, or use contact details you can verify.');
-  if (conflicts[0]?.username_exists) throw new Error('That username is already in use. Choose another username or leave the optional username blank.');
+  if (conflicts[0]?.username_exists) {
+    username = null;
+    usernameSkipped = true;
+  }
   if (conflicts[0]?.candidate_exists) throw new Error('This candidate number is already associated with a registration. Sign in if this is your registration, or check the candidate number and examination session.');
   const registrationFee = Number(sessionRows[0].registration_fee);
   const frankingFee = Number(sessionRows[0].franking_fee);
@@ -202,7 +206,7 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   await sql`INSERT INTO otp_challenges (registration_id, purpose, channel, destination_hash, code_hash, expires_at) VALUES (${registration.id}, 'registration', ${channel}, ${hash(destination)}, ${hash(otp)}, ${new Date(Date.now() + OTP_TTL_MS)})`;
   const delivery = await sendOtp(channel, destination, otp);
   await sql`INSERT INTO identity_events (registration_id, event_type, result, request_id, ip_hash) VALUES (${registration.id}, 'registration_started', 'otp_sent', ${requestId}, ${ip ? hash(ip) : null})`;
-  return { registration_id: registrationKey, channel, masked_destination: maskDestination(destination), ...delivery };
+  return { registration_id: registrationKey, channel, masked_destination: maskDestination(destination), username_skipped: usernameSkipped, ...delivery };
 }
 
 export async function verifyRegistration(registrationKey: string, code: string, requestId: string, ip?: string, userAgent?: string) {
@@ -225,9 +229,11 @@ export async function verifyRegistration(registrationKey: string, code: string, 
   }
   const email = pending.email as string | null;
   const phone = pending.phone_e164 as string | null;
-  const [user] = await sql.begin(async (tx) => {
+  let username = pending.username as string | null;
+  let usernameSkipped = false;
+  const createUser = () => sql.begin(async (tx) => {
     await tx`UPDATE otp_challenges SET consumed_at = now() WHERE id = ${pending.otp_id} AND consumed_at IS NULL`;
-    const users = await tx`INSERT INTO users (name, email, phone_e164, username, password, role, status, created_at) VALUES (${payload.full_name}, ${email}, ${phone}, ${pending.username}, ${pending.password_hash}, 'citizen', 'active', now()) RETURNING id`;
+    const users = await tx`INSERT INTO users (name, email, phone_e164, username, password, role, status, created_at) VALUES (${payload.full_name}, ${email}, ${phone}, ${username}, ${pending.password_hash}, 'citizen', 'active', now()) RETURNING id`;
     await tx`INSERT INTO candidate_profiles (user_id, full_name, full_name_normalized, date_of_birth, candidate_number, candidate_number_normalized, examination_session_id, examination_centre_id, series, sex, certificate_number, date_of_issue, school_name) VALUES (${users[0].id}, ${payload.full_name}, ${payload.full_name_normalized}, ${payload.date_of_birth}, ${payload.candidate_number}, ${payload.candidate_number_normalized}, ${payload.examination_session_id}, ${payload.examination_centre_id}, ${payload.series}, ${payload.sex}, ${payload.certificate_number}, ${payload.date_of_issue}, ${payload.school_name})`;
     await tx`INSERT INTO candidate_numbers (candidate_number, centre_number_id, user_id, examination_session_id) VALUES (${payload.candidate_number}, ${payload.centre_number_id}, ${users[0].id}, ${payload.examination_session_id})`;
     for (const subject of payload.subjects) await tx`INSERT INTO candidate_subject_registrations (user_id, subject_id, examination_session_id, amount_paid) VALUES (${users[0].id}, ${subject.id}, ${payload.examination_session_id}, ${subject.amount})`;
@@ -237,7 +243,19 @@ export async function verifyRegistration(registrationKey: string, code: string, 
     await tx`INSERT INTO identity_events (user_id, registration_id, event_type, result, request_id) VALUES (${users[0].id}, ${pending.id}, 'registration_verified', 'success', ${requestId})`;
     return users;
   });
-  return { userId: user.id };
+  let userId: string;
+  try {
+    const users = await createUser();
+    userId = users[0].id;
+  } catch (error) {
+    const conflict = getRegistrationConflictMessage(error);
+    if (!username || !conflict?.startsWith('That username is already in use.')) throw error;
+    username = null;
+    usernameSkipped = true;
+    const users = await createUser();
+    userId = users[0].id;
+  }
+  return { userId, usernameSkipped };
 }
 
 export async function resendRegistrationOtp(registrationKey: string, requestId: string) {
