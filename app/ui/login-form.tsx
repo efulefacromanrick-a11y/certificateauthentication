@@ -22,17 +22,17 @@ export default function LoginForm({ error, next = '/dashboard' }: { error?: stri
           <div>
             <label
               className="mb-3 mt-5 block text-xs font-medium text-gray-900"
-              htmlFor="email"
+              htmlFor="identifier"
             >
-              Email address used during registration
+              Email, phone number, or username
             </label>
             <div className="relative">
               <input
                 className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
-                id="email"
-                type="email"
-                name="email"
-                placeholder="name@example.com"
+                id="identifier"
+                type="text"
+                name="identifier"
+                placeholder="Enter your email, phone, or username"
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}

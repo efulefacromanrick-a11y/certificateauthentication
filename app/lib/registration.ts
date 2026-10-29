@@ -10,10 +10,9 @@ const subjectSelectionSchema = z.array(z.string().uuid()).min(1, 'Select at leas
 const paymentModeSchema = z.enum(['mobile_money', 'orange_money']);
 const certificateNumberSchema = z.enum(['GCE/OL/100245', 'GCE/0L/2024/200316', 'GCE/AL/2024/400512', 'GCE/AL/2024/500637']);
 const schoolNameSchema = z.enum(['GOVERNMENT BILINGUAL HIGH SCHOOL', 'GOVERNMENT HIGH SCHOOL MKAMLIKUM', 'GOVERNMENT HIGH SCHOOL KUMBA-MBENG', 'GOVERNMENT HIGH SCHOOL KAKE-KUMBA']);
-const usernameOptions = ['ADMIN123', 'JOHN2024', 'SCHOOLADMIN', 'VERIFYCERT', 'GCEMANAGER'] as const;
 const usernameSchema = z.preprocess(
   (value) => typeof value === 'string' && !value.trim() ? undefined : value,
-  z.enum(usernameOptions).optional(),
+  z.string().trim().min(3).max(30).regex(/^[a-zA-Z0-9._-]+$/, 'Use 3–30 letters, numbers, dots, underscores, or hyphens.').optional(),
 );
 
 export const registrationSchema = z.object({
@@ -54,6 +53,15 @@ function normalizePhone(value: string) { return value.replace(/[\s()-]/g, ''); }
 function hash(value: string) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function createOtp() { return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0'); }
 function maskDestination(value: string) { return value.includes('@') ? `${value.slice(0, 2)}***${value.slice(value.indexOf('@'))}` : `${value.slice(0, 3)}***${value.slice(-2)}`; }
+
+export function getRegistrationConflictMessage(error: unknown) {
+  if (!error || typeof error !== 'object' || !('code' in error) || error.code !== '23505') return null;
+  const constraint = 'constraint' in error && typeof error.constraint === 'string' ? error.constraint : '';
+  if (constraint.includes('username')) return 'That username is already in use. Choose another username or leave the optional username blank.';
+  if (constraint.includes('candidate_number')) return 'This candidate number is already associated with a registration. Sign in if this is your registration, or check the candidate number and examination session.';
+  if (constraint.includes('phone') || constraint.includes('email')) return 'An account already uses this email address or phone number. Sign in with that account, or use contact details you can verify.';
+  return 'An account or candidate registration already uses one of these details. Sign in if you already registered, or review the details and try again.';
+}
 
 async function sendOtp(channel: 'email' | 'sms', destination: string, code: string) {
   const verificationRequired = process.env.REGISTRATION_OTP_REQUIRED !== 'false';
@@ -122,16 +130,37 @@ export async function startRegistration(input: unknown, requestId: string, ip?: 
   const birthDate = new Date(`${parsed.date_of_birth}T00:00:00Z`);
   if (birthDate > new Date()) throw new Error('Date of birth cannot be in the future.');
 
-  const [sessionRows, centre, subjects, duplicates] = await Promise.all([
+  const [sessionRows, centre, subjects, conflicts] = await Promise.all([
     sql`SELECT id, registration_fee, franking_fee FROM examination_sessions WHERE id = ${parsed.examination_session_id} AND status = 'open' AND (registration_opens_at IS NULL OR registration_opens_at <= now()) AND (registration_closes_at IS NULL OR registration_closes_at > now()) LIMIT 1`,
     sql`SELECT c.id, cn.id AS centre_number_id FROM examination_centres c JOIN centre_numbers cn ON cn.centre_id = c.id WHERE c.id = ${parsed.examination_centre_id} AND cn.centre_number = ${centreNumber} AND c.status = 'active' LIMIT 1`,
     sql`SELECT id, code, name, amount, paper_fee, practical_fee, practical_required FROM examination_subjects WHERE id = ANY(${parsed.subjects}::uuid[]) AND status = 'active'`,
-    sql`SELECT u.id FROM users u LEFT JOIN candidate_profiles p ON p.user_id = u.id WHERE (CAST(${email} AS text) IS NOT NULL AND lower(u.email) = ${email}) OR (CAST(${phone} AS text) IS NOT NULL AND u.phone_e164 = ${phone}) OR (CAST(${username} AS text) IS NOT NULL AND lower(u.username) = ${username}) OR EXISTS (SELECT 1 FROM candidate_profiles cp WHERE cp.candidate_number_normalized = ${candidateNumber} AND cp.examination_session_id = ${parsed.examination_session_id}) LIMIT 1`,
+    sql<{ contact_exists: boolean; username_exists: boolean; candidate_exists: boolean }[]>`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM users
+          WHERE (${email}::text IS NOT NULL AND lower(email) = ${email})
+             OR (${phone}::text IS NOT NULL AND phone_e164 = ${phone})
+        ) AS contact_exists,
+        EXISTS (
+          SELECT 1 FROM users
+          WHERE ${username}::text IS NOT NULL AND lower(username) = ${username}
+        ) AS username_exists,
+        EXISTS (
+          SELECT 1 FROM candidate_profiles
+          WHERE candidate_number_normalized = ${candidateNumber}
+            AND examination_session_id = ${parsed.examination_session_id}
+        ) OR EXISTS (
+          SELECT 1 FROM candidate_numbers
+          WHERE candidate_number = ${parsed.candidate_number}
+        ) AS candidate_exists
+    `,
   ]);
   if (!sessionRows.length) throw new Error('This examination session is not open for registration.');
   if (!centre.length) throw new Error('This examination centre is not available.');
   if (subjects.length !== parsed.subjects.length) throw new Error('One or more selected subjects are no longer available. Refresh and try again.');
-  if (duplicates.length) throw new Error('A registration already exists for one or more of these details. Try signing in or contact support.');
+  if (conflicts[0]?.contact_exists) throw new Error('An account already uses this email address or phone number. Sign in with that account, or use contact details you can verify.');
+  if (conflicts[0]?.username_exists) throw new Error('That username is already in use. Choose another username or leave the optional username blank.');
+  if (conflicts[0]?.candidate_exists) throw new Error('This candidate number is already associated with a registration. Sign in if this is your registration, or check the candidate number and examination session.');
   const registrationFee = Number(sessionRows[0].registration_fee);
   const frankingFee = Number(sessionRows[0].franking_fee);
   const centreNumberId = centre[0].centre_number_id;

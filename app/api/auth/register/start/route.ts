@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { startRegistration, verifyRegistration } from '@/app/lib/registration';
+import { getRegistrationConflictMessage, startRegistration, verifyRegistration } from '@/app/lib/registration';
 import { setSession } from '@/app/lib/auth';
 import { checkRateLimit, clientAddress, requestId, securityHeaders } from '@/app/lib/security/request';
 
@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(`[registration-start] ${traceId}`, error);
     const message = error instanceof Error ? error.message : 'Unable to start registration.';
-    const status = message.startsWith('A registration') || message.includes('not open') || message.includes('not available') ? 409 : 422;
-    return new Response(JSON.stringify({ error: message }), { status, headers: securityHeaders(traceId) });
+    const conflict = getRegistrationConflictMessage(error);
+    const status = conflict || message.includes('already uses') || message.includes('already registered') || message.includes('already in use') || message.includes('not open') || message.includes('not available') ? 409 : 422;
+    return new Response(JSON.stringify({ error: conflict ?? message }), { status, headers: securityHeaders(traceId) });
   }
 }

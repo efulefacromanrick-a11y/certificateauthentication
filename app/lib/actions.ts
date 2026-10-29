@@ -9,13 +9,21 @@ import { clearSession, getCurrentUserId, setSession, isAdmin } from './auth';
 import { revokeCertificate } from './certificates';
 
 export async function login(formData: FormData) {
-  const email = z.string().trim().email().safeParse(formData.get('email'));
+  const identifier = z.string().trim().min(3).max(254).safeParse(formData.get('identifier'));
   const password = z.string().min(6).safeParse(formData.get('password'));
-  if (!email.success || !password.success) redirect('/login?error=Invalid%20email%20or%20password');
+  if (!identifier.success || !password.success) redirect('/login?error=Invalid%20sign-in%20details');
 
-  const users = await sql`SELECT id, password FROM users WHERE email = ${email.data.toLowerCase()} LIMIT 1`;
+  const normalizedIdentifier = identifier.data.toLowerCase();
+  const normalizedPhone = identifier.data.replace(/[\s()-]/g, '');
+  const users = await sql`
+    SELECT id, password FROM users
+    WHERE lower(email) = ${normalizedIdentifier}
+       OR lower(username) = ${normalizedIdentifier}
+       OR phone_e164 = ${normalizedPhone}
+    LIMIT 1
+  `;
   const valid = users.length > 0 && await bcrypt.compare(password.data, users[0].password);
-  if (!valid) redirect('/login?error=Invalid%20email%20or%20password');
+  if (!valid) redirect('/login?error=Invalid%20sign-in%20details');
   await setSession(users[0].id);
   const next = z.string().refine((value) => value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')).safeParse(formData.get('next'));
   redirect(next.success ? next.data : '/dashboard');

@@ -3,6 +3,8 @@ import { fetchCertificates } from '@/app/lib/data';
 import CertificateManager from '@/app/ui/certificates/manager';
 import RegisterQr from '@/app/ui/certificates/register-qr';
 import { revokeCertificateAction } from '@/app/lib/actions';
+import { fetchCandidateRegistrations } from '@/app/lib/data';
+import CandidateRegistrations from '@/app/ui/certificates/candidate-registrations';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +15,10 @@ function examinationLabel(type?: 'O/L' | 'A/L', year?: number) {
 
 export default async function CertificatesPage({ searchParams }: { searchParams: Promise<{ query?: string }> }) {
   const { query = '' } = await searchParams;
-  const certificates = await fetchCertificates(query);
+  const [certificates, candidates] = await Promise.all([
+    fetchCertificates(query),
+    fetchCandidateRegistrations(query),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -24,6 +29,8 @@ export default async function CertificatesPage({ searchParams }: { searchParams:
       </div>
 
       <CertificateManager />
+
+      <CandidateRegistrations candidates={candidates} certificates={certificates} />
 
       <section className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

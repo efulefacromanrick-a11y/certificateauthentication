@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { verifyRegistration } from '@/app/lib/registration';
+import { getRegistrationConflictMessage, verifyRegistration } from '@/app/lib/registration';
 import { setSession } from '@/app/lib/auth';
 import { checkRateLimit, clientAddress, requestId, securityHeaders } from '@/app/lib/security/request';
 
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     await setSession(result.userId);
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: securityHeaders(traceId) });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unable to verify registration.' }), { status: 422, headers: securityHeaders(traceId) });
+    const conflict = getRegistrationConflictMessage(error);
+    return new Response(JSON.stringify({ error: conflict ?? (error instanceof Error ? error.message : 'Unable to verify registration.') }), { status: conflict ? 409 : 422, headers: securityHeaders(traceId) });
   }
 }
