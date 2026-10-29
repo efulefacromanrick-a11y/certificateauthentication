@@ -35,12 +35,19 @@ function readQrValue(value: string) {
   const trimmed = value.trim();
   try {
     const url = new URL(trimmed);
-    return {
-      mode: (url.searchParams.has('id') ? 'id' : 'jws') as 'id' | 'jws',
-      value: url.searchParams.get(url.searchParams.has('id') ? 'id' : 'jws') || trimmed,
-    };
+    const id = url.searchParams.get('id');
+    const jws = url.searchParams.get('jws');
+    if (id) return { mode: 'id' as const, value: id };
+    if (jws) return { mode: 'jws' as const, value: jws };
+    throw new Error('This QR code is not a certificate verification link.');
   } catch {
-    return { mode: 'jws' as const, value: trimmed };
+    if (/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
+      throw new Error('This QR code is not a certificate verification link.');
+    }
+    return {
+      mode: trimmed.split('.').length === 3 ? 'jws' as const : 'id' as const,
+      value: trimmed,
+    };
   }
 }
 
