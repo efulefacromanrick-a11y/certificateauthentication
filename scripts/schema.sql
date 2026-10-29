@@ -210,6 +210,19 @@ CREATE TABLE IF NOT EXISTS otp_challenges (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS otp_challenges_registration_idx ON otp_challenges (registration_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS password_recovery_challenges (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  recovery_key TEXT NOT NULL UNIQUE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL CHECK (channel IN ('email', 'sms')),
+  destination_hash TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS password_recovery_user_idx ON password_recovery_challenges (user_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS consents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,

@@ -63,8 +63,8 @@ export function getRegistrationConflictMessage(error: unknown) {
   return 'An account or candidate registration already uses one of these details. Sign in if you already registered, or review the details and try again.';
 }
 
-async function sendOtp(channel: 'email' | 'sms', destination: string, code: string) {
-  const verificationRequired = process.env.REGISTRATION_OTP_REQUIRED !== 'false';
+async function sendOtp(channel: 'email' | 'sms', destination: string, code: string, forceVerification = false) {
+  const verificationRequired = forceVerification || process.env.REGISTRATION_OTP_REQUIRED !== 'false';
   if (!verificationRequired && process.env.NODE_ENV !== 'production') return {};
 
   if (channel === 'email' && process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) {
@@ -109,6 +109,86 @@ async function sendOtp(channel: 'email' | 'sms', destination: string, code: stri
   throw new Error(channel === 'email'
     ? 'Email verification is not configured. Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
     : 'Phone verification is not configured.');
+}
+
+export async function startPasswordRecovery(input: unknown, requestId: string) {
+  const identifier = z.string().trim().min(3).max(254).parse(input);
+  const normalizedIdentifier = identifier.toLowerCase();
+  const normalizedPhone = normalizePhone(identifier);
+  const [user] = await sql<{ id: string; email: string | null; phone_e164: string | null }[]>`
+    SELECT id, email, phone_e164 FROM users
+    WHERE status = 'active'
+      AND (lower(email) = ${normalizedIdentifier}
+        OR lower(username) = ${normalizedIdentifier}
+        OR phone_e164 = ${normalizedPhone})
+    LIMIT 1
+  `;
+  const recoveryKey = crypto.randomBytes(32).toString('base64url');
+  if (!user) return { recovery_id: recoveryKey };
+
+  const destination = user.email || user.phone_e164;
+  if (!destination) return { recovery_id: recoveryKey };
+  const channel = user.email ? 'email' : 'sms';
+  const otp = createOtp();
+  const [challenge] = await sql`
+    INSERT INTO password_recovery_challenges (recovery_key, user_id, channel, destination_hash, code_hash, expires_at)
+    VALUES (${recoveryKey}, ${user.id}, ${channel}, ${hash(destination)}, ${hash(otp)}, ${new Date(Date.now() + OTP_TTL_MS)})
+    RETURNING id
+  `;
+  await sql`UPDATE password_recovery_challenges SET consumed_at = now() WHERE user_id = ${user.id} AND id <> ${challenge.id} AND consumed_at IS NULL`;
+  try {
+    const delivery = await sendOtp(channel, destination, otp, true);
+    return { recovery_id: recoveryKey, ...delivery };
+  } catch (error) {
+    await sql`UPDATE password_recovery_challenges SET consumed_at = now() WHERE id = ${challenge.id} AND consumed_at IS NULL`;
+    console.error(`[password-recovery] ${requestId} OTP delivery failed`, error);
+    return { recovery_id: recoveryKey };
+  }
+}
+
+export async function resetPassword(input: unknown) {
+  const parsed = z.object({
+    recovery_id: z.string().min(20).max(100),
+    code: z.string().regex(/^[0-9]{6}$/),
+    password: z.string().min(12).max(128).refine(
+      (value) => !['123456', 'password123', 'qwerty123456'].includes(value.toLowerCase()),
+      'Choose a less common password.',
+    ),
+  }).parse(input);
+  const [challenge] = await sql`
+    SELECT id, user_id, code_hash, expires_at, attempts, consumed_at
+    FROM password_recovery_challenges
+    WHERE recovery_key = ${parsed.recovery_id}
+    LIMIT 1
+  `;
+  if (!challenge || challenge.consumed_at || new Date(challenge.expires_at) <= new Date() || challenge.attempts >= MAX_OTP_ATTEMPTS) {
+    throw new Error('This recovery code is invalid or expired. Request a new code and try again.');
+  }
+  if (hash(parsed.code) !== challenge.code_hash) {
+    await sql`UPDATE password_recovery_challenges SET attempts = attempts + 1 WHERE id = ${challenge.id} AND consumed_at IS NULL AND attempts < ${MAX_OTP_ATTEMPTS}`;
+    throw new Error('This recovery code is invalid or expired. Request a new code and try again.');
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.password, 12);
+  const updated = await sql.begin(async (tx) => {
+    const claimed = await tx`
+      UPDATE password_recovery_challenges
+      SET consumed_at = now()
+      WHERE id = ${challenge.id} AND code_hash = ${hash(parsed.code)}
+        AND consumed_at IS NULL AND expires_at > now() AND attempts < ${MAX_OTP_ATTEMPTS}
+      RETURNING user_id
+    `;
+    if (!claimed.length) return false;
+    const users = await tx`
+      UPDATE users SET password = ${passwordHash}
+      WHERE id = ${claimed[0].user_id} AND status = 'active'
+      RETURNING id
+    `;
+    if (!users.length) throw new Error('This account is unavailable. Contact support for help.');
+    await tx`UPDATE password_recovery_challenges SET consumed_at = now() WHERE user_id = ${claimed[0].user_id} AND id <> ${challenge.id} AND consumed_at IS NULL`;
+    return true;
+  });
+  if (!updated) throw new Error('This recovery code is invalid or expired. Request a new code and try again.');
 }
 
 export async function getRegistrationOptions() {

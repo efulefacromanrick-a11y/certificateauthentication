@@ -5,6 +5,7 @@ import {
   ExclamationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { ArrowRightIcon } from '@heroicons/react/20/solid';
+import Link from 'next/link';
 import { Button } from './button';
 import { login } from '@/app/lib/actions';
 
@@ -61,6 +62,9 @@ export default function LoginForm({ error, next = '/dashboard' }: { error?: stri
               />
               <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
             </div>
+            <Link href="/forgot-password" className="mt-2 inline-block text-xs font-medium text-sky-700 hover:underline">
+              Forgot password?
+            </Link>
           </div>
         </div>
         <Button className="mt-4 w-full">
